@@ -1,0 +1,470 @@
+{%- capture form_id -%}AddToCartForm-{{ section_id }}{%- endcapture -%}
+{%- form 'product', product, id: form_id, class: 'product-single__form' -%}
+  {%- unless product.has_only_default_variant -%}
+    {%- for option in product.options_with_values -%}
+      {%- liquid
+        if settings.product_color_swatches
+          assign is_color = false
+          assign color_option_index = 0
+          assign swatch_trigger = 'products.general.color_swatch_trigger' | t | downcase
+          assign color_option_index = forloop.index0
+          assign downcased_option = option.name | downcase
+          if downcased_option contains swatch_trigger
+            assign is_color = true
+          elsif swatch_trigger == 'color' and downcased_option contains 'colour'
+            assign is_color = true
+          endif
+        endif
+
+        assign is_size_option = false
+        if option.name contains 'Size'
+          assign is_size_option = true
+        endif
+      -%}
+
+      {%- if is_size_option -%}
+        {%- render 'variant-dropdown',
+          product: product,
+          section_id: section_id,
+          option: option,
+          forloop: forloop
+        -%}
+      {%- elsif settings.variant_type == 'button' -%}
+        {%- render 'variant-button',
+          product: product,
+          section_id: section_id,
+          option: option,
+          forloop: forloop,
+          is_color: is_color,
+          color_option_index: color_option_index
+        -%}
+      {%- else -%}
+        {%- render 'variant-dropdown',
+          product: product,
+          section_id: section_id,
+          option: option,
+          forloop: forloop
+        -%}
+      {%- endif -%}
+    {%- endfor -%}
+  {%- endunless -%}
+
+  <select name="id" id="ProductSelect-{{ section_id }}" class="product-single__variants no-js">
+    {%- for variant in product.variants -%}
+      {%- if variant.available -%}
+        <option {% if variant == product.selected_or_first_available_variant %}
+          selected="selected"{% endif %}
+          value="{{ variant.id }}">
+          {{ variant.title }} - <span bss-b2b-product-id="{{ product.id }}" bss-b2b-variant-price bss-b2b-variant-id="{{ product.selected_or_first_available_variant.id }}" bss-b2b-variant-price>{{ variant.price | money_with_currency }}</span>
+        </option>
+      {%- else -%}
+        <option disabled="disabled" value="{{variant.id}}">
+          {{ variant.title }} - {{ 'products.product.sold_out' | t }}
+        </option>
+      {%- endif -%}
+    {%- endfor -%}
+  </select>
+
+  {%- if settings.quantity_enable -%}
+    <div class="product__quantity product__quantity--{{ settings.variant_type }}">
+      <label for="Quantity-{{ section_id }}">{{ 'products.product.quantity' | t }}</label>
+      {%- render 'quantity-input', id: section_id, qty: 1, min: 1 -%}
+    </div>
+  {%- endif -%}
+
+  {%- assign inventory_visible = false -%}
+  {%- if settings.inventory_enable and current_variant.inventory_management == 'shopify' -%}
+    {%- if current_variant.inventory_quantity <= settings.inventory_threshold and current_variant.inventory_quantity >= 0 -%}
+      {%- assign inventory_visible = true -%}
+    {%- endif -%}
+  {%- endif -%}
+
+  {%- liquid
+    if current_variant.inventory_quantity == 0 or current_variant.inventory_policy == 'continue'
+      assign inventory_visible = false
+    endif
+
+    assign show_incoming = false
+    if current_variant.incoming and inventory_visible == false and current_variant.inventory_quantity <= settings.inventory_threshold
+      assign show_incoming = true
+    endif
+  -%}
+
+  {%- if settings.inventory_enable -%}
+    <div
+      id="ProductInventory-{{ section_id }}"
+      class="product__inventory product__inventory--pill{% unless inventory_visible %} hide{% endunless %}"
+      >
+      {%- if current_variant.available -%}
+        <span class="product__inventory-dot" aria-hidden="true"></span>
+        <span class="product__inventory-label">{{ 'products.product.stock_label' | t: count: current_variant.inventory_quantity }}</span>
+      {%- endif -%}
+    </div>
+  {%- endif -%}
+
+  {%- if settings.inventory_transfers_enable -%}
+    <div
+      id="ProductIncomingInventory-{{ section_id }}"
+      class="product__inventory{% if inventory_visible %} hide{% endif %}">
+      {%- if show_incoming == true -%}
+        {%- if current_variant.next_incoming_date -%}
+          {%- assign date = current_variant.next_incoming_date | date: format: 'date' -%}
+          {%- if current_variant.available -%}
+            {{ 'products.product.will_not_ship_until' | t: date: date }}
+          {%- else -%}
+            {{ 'products.product.will_be_in_stock_after' | t: date: date }}
+          {%- endif -%}
+        {%- else -%}
+          {{ 'products.product.waiting_for_stock' | t }}
+        {%- endif -%}
+      {%- endif -%}
+    </div>
+  {%- endif -%}
+
+  {%- liquid
+    assign enable_dynamic_buttons = false
+    if settings.enable_payment_button and template != 'product.preorder'
+      assign enable_dynamic_buttons = true
+    endif
+  -%}
+
+  {%- if enable_dynamic_buttons -%}
+    <div class="payment-buttons">
+  {%- endif -%}
+
+    {%- liquid
+      assign default_text = 'products.product.add_to_cart' | t
+      assign button_text = 'products.product.add_to_cart' | t
+      if template == 'product.preorder'
+        assign default_text = 'products.product.preorder' | t
+        assign button_text = 'products.product.preorder' | t
+      endif
+      unless current_variant.available
+        assign button_text = 'products.product.sold_out' | t
+      endunless
+    -%}
+    <div class="size-select-warning">
+      <span>Please select a size</span>
+    </div>
+    <button
+      {% if product.empty? %}type="button"{% else %}type="submit"{% endif %}
+      name="add"
+      id="AddToCart-{{ section_id }}"
+      class="btn btn--full add-to-cart disabled{% if enable_dynamic_buttons and product.selling_plan_groups == empty %} btn--secondary{% endif %}"
+      {% unless current_variant.available %} disabled="disabled"{% endunless %}>
+      <span id="AddToCartText-{{ section_id }}" data-default-text="{{ default_text }}">
+        {{ button_text }}
+      </span>
+    </button>
+
+    {%- if enable_dynamic_buttons -%}
+      <div class="shiprocket-headless" data-type="product"></div>
+      {{ form | payment_button }}
+    {%- endif -%}
+
+  {%- if enable_dynamic_buttons -%}
+    </div>
+  {%- endif -%}
+  
+
+  <div class="essential-estimated-delivery-block-liquid"></div>
+
+{% comment %} <a href="/pages/return-policy" class="return-refund">Return/Refund Policy +</a> {% endcomment %}
+ 
+<div class="idc-return-wrapper">
+  <button class="idc-return-header">
+    Return Policy
+    {% if product.collections contains collections['clearancesale'] %}
+      <span class="idc-clearance-badge">NO EXCHANGE / NO RETURN ON CLEARANCE SALE ITEMS</span>
+    {% endif %}
+  </button>
+
+  <div class="idc-return-body">
+    {% if product.collections contains collections['clearancesale'] %}
+      <p class="idc-clearance-alert">
+        <strong>Note:</strong> This item is part of our <strong>Clearance Sale</strong>.
+        Therefore, it is <strong>not eligible for return or exchange</strong>.
+        Please confirm your selection before completing your purchase.
+        Please also note that  Clearance Sale items are <strong>not eligible for any other schemes / promotions on our website.</strong>
+      </p>
+    {% endif %}
+
+    <p>
+      Return and Exchange Policy offer you the option to return or exchange items purchased on
+      <strong>IDCult.com</strong> within 7 days of receipt. If you choose to exchange the item for reason of mismatch,
+      size, or receipt of a defective item, you will be provided with a replacement of the item, free of cost. However,
+      an exchange is subject to the availability of the item in our stock.
+    </p>
+
+    <p>
+      Please make sure that products are returned with the tags and the packaging intact, in an unwashed and undamaged
+      condition. Refund/replacement shall be issued after a thorough quality check of the product(s).
+    </p>
+
+    <p>
+      Please note that any product along with a gift/ combo must be returned in its entirety.
+    </p>
+
+    <p>
+      In case you want to return or exchange the product for any reason, within 7 days of delivery, please contact our
+      customer care department through email at
+      <a href="mailto:care@idcult.com">care@idcult.com</a> or call
+      <a href="tel:+919910433300">+91-9910433300</a> (9:30 AM till 6:00 PM; Mon-Sat).
+    </p>
+  </div>
+</div>
+
+
+<style>
+.idc-return-wrapper {
+  width: 100%;
+  max-width: 800px;
+  margin: 20px auto;
+  background: #fff;
+  border: 1px solid #000;
+}
+
+.idc-return-header {
+  width: 100%;
+  padding: 15px 20px;
+  background: #fff;
+  border: none;
+  font-size: 18px;
+  font-weight: bold;
+  text-align: left;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.idc-clearance-badge {
+  background: #ffeb3b;
+  color: #d32f2f;
+  font-size: 13px;
+  font-weight: bold;
+  padding: 5px 10px;
+  border-radius: 4px;
+}
+
+.idc-return-body {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.4s ease;
+  padding: 0 20px;
+}
+
+.idc-return-body p {
+  font-size: 15px;
+  line-height: 1.6;
+  margin: 15px 0;
+}
+
+.idc-clearance-alert {
+  background: #fff3cd;
+  border-left: 4px solid #ff9800;
+  padding: 10px 15px;
+  margin: 15px 0;
+}
+
+/* --- Stock status pill (matches target design: green dot + rounded outline) --- */
+.product__inventory--pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border: 1px solid #ddd;
+  border-radius: 999px;
+  font-size: 14px;
+  color: #1a1a1a;
+  background: #fff;
+  margin: 12px 0;
+}
+
+.product__inventory--pill.hide {
+  display: none;
+}
+
+.product__inventory-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #4caf50;
+  flex-shrink: 0;
+}
+
+.product__inventory-label {
+  line-height: 1;
+}
+
+/* --- Add to cart button: solid black, full width, no icon --- */
+.add-to-cart.btn--full {
+  background: #000;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+.add-to-cart.btn--full:disabled,
+.add-to-cart.btn--full.disabled {
+  background: #000;
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* --- Size dropdown (replaces button-style size swatches) --- */
+.product-form__size-dropdown select,
+[data-option-name="Size"] select {
+  width: 100%;
+  padding: 12px 16px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 15px;
+  background: #fff;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8'><path d='M1 1l5 5 5-5' stroke='%23000' stroke-width='1.5' fill='none'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 16px center;
+}
+
+</style>
+
+<script>
+document.querySelectorAll(".idc-return-header").forEach(header => {
+  header.addEventListener("click", function (e) {
+    e.preventDefault();
+    const body = this.nextElementSibling;
+
+    if (body.style.maxHeight) {
+      body.style.maxHeight = null;
+    } else {
+      body.style.maxHeight = body.scrollHeight + "px";
+    }
+  });
+});
+</script>
+
+
+
+
+
+
+
+
+
+  <div class="shopify-payment-terms product__policies">{{ form | payment_terms }}</div>
+
+  <textarea id="VariantsJson-{{ section_id }}" class="hide" aria-hidden="true" aria-label="Product JSON">
+    {{ product.variants | json }}
+  </textarea>
+  {%- if product.options.size > 1 -%}
+    <textarea id="CurrentVariantJson-{{ section_id }}" class="hide" aria-hidden="true" aria-label="Variant JSON">
+      {{ current_variant | json }}
+    </textarea>
+  {%- endif -%}
+{% render 'ZooomyBackinStock' %}{% endform %}
+
+<script>
+  /*
+    Size selection now happens via a <select> dropdown (rendered by the
+    'variant-dropdown' snippet) instead of the old swatch buttons.
+    Color still renders via 'variant-button' (settings.variant_type == 'button'),
+    so the swatch-based color picker is untouched.
+  */
+
+  function enableAddToCart() {
+    var atcButton = document.querySelector('.btn.btn--full.add-to-cart');
+    if (!atcButton) return;
+    atcButton.classList.remove('disabled');
+    atcButton.classList.remove('cursor-not-allowed');
+    var errorMessage = document.querySelector('.size-select-warning');
+    if (errorMessage) errorMessage.classList.remove('show-warning');
+  }
+
+  function disableAddToCart() {
+    var atcButton = document.querySelector('.btn.btn--full.add-to-cart');
+    if (!atcButton) return;
+    atcButton.classList.add('disabled');
+  }
+
+  document.addEventListener('DOMContentLoaded', function () {
+    // Size dropdown(s) rendered by the variant-dropdown snippet.
+    var sizeSelects = document.querySelectorAll('select[data-option-name="Size"], .product-form__size-dropdown select');
+
+    if (sizeSelects.length) {
+      sizeSelects.forEach(function (select) {
+        // If a size is already selected on load, enable the button.
+        if (select.value) {
+          enableAddToCart();
+        }
+        select.addEventListener('change', function () {
+          if (this.value) {
+            enableAddToCart();
+          } else {
+            disableAddToCart();
+          }
+        });
+      });
+    } else {
+      // Fallback to legacy swatch-button behavior for markup without a size dropdown.
+      var swatchInterval = setInterval(swatchTimer, 1500);
+    }
+
+    function swatchTimer() {
+      let swatches = document.querySelectorAll('#swatch-option1 li.swatch-view-item');
+      if (swatches.length > 1) {
+        clearInterval(swatchInterval);
+        var atcButton = document.querySelector('.btn.btn--full.add-to-cart');
+        atcButton.classList.remove('cursor-not-allowed');
+        swatches.forEach(function (buy) {
+          buy.onclick = function () {
+            enableAddToCart();
+            swatches.forEach(function (swatch) {
+              swatch.classList.remove('size-selected');
+            });
+            this.classList.add('size-selected');
+          };
+        });
+      } else if (swatches.length == 1) {
+        enableAddToCart();
+        swatches.forEach(function (swatch) {
+          swatch.classList.add('size-selected');
+        });
+      } else {
+        var atcButton = document.querySelector('.btn.btn--full.add-to-cart');
+        if (atcButton) atcButton.classList.add('cursor-not-allowed');
+      }
+    }
+  });
+
+  var atcButton = document.querySelector(".btn.btn--full.add-to-cart");
+  if (atcButton) {
+    atcButton.onclick = function (e) {
+      var sizeSelect = document.querySelector('select[data-option-name="Size"], .product-form__size-dropdown select');
+      var conditionalVariable = false;
+
+      if (sizeSelect) {
+        conditionalVariable = !!sizeSelect.value;
+      } else {
+        let swatches = document.querySelectorAll('#swatch-option1 li.swatch-view-item');
+        swatches.forEach(function (swatch) {
+          if (swatch.classList.contains('size-selected')) {
+            conditionalVariable = true;
+          }
+        });
+      }
+
+      if (conditionalVariable) {
+        let errorMessage = document.querySelector(".size-select-warning");
+        if (errorMessage) errorMessage.classList.remove("show-warning");
+      } else {
+        e.preventDefault();
+        let errorMessage = document.querySelector(".size-select-warning");
+        if (errorMessage) errorMessage.classList.add("show-warning");
+      }
+    };
+  }
+</script>

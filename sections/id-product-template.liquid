@@ -1,0 +1,917 @@
+{%- liquid
+  assign section_id = section.id
+  assign current_variant = product.selected_or_first_available_variant
+  assign featured_media = current_variant.featured_media | default: product.featured_media
+  assign product_img_structure = featured_media | img_url: '1x1' | replace: '_1x1.', '_{width}x.'
+  assign product_zoom_size = '1800x1800'
+  assign product_image_size = '900x'
+
+  assign highlight_count = 0
+  assign closer_count = 0
+  assign wear_count = 0
+  assign accordion_count = 0
+  assign comparison_count = 0
+  assign service_count = 0
+
+  for block in section.blocks
+    case block.type
+      when 'highlight'
+        assign highlight_count = highlight_count | plus: 1
+      when 'closer'
+        assign closer_count = closer_count | plus: 1
+      when 'wear'
+        assign wear_count = wear_count | plus: 1
+      when 'accordion'
+        assign accordion_count = accordion_count | plus: 1
+      when 'comparison_row'
+        assign comparison_count = comparison_count | plus: 1
+      when 'service'
+        assign service_count = service_count | plus: 1
+    endcase
+  endfor
+-%}
+
+<div
+  id="ProductSection-{{ section_id }}"
+  class="id-pdp product-section"
+  data-section-id="{{ section_id }}"
+  data-section-type="product"
+  data-product-handle="{{ product.handle }}"
+  data-product-title="{{ product.title | escape }}"
+  data-product-url="{{ product.url | within: collection }}"
+  data-aspect-ratio="{{ 100 | divided_by: featured_media.aspect_ratio }}"
+  data-img-url="{{ product_img_structure }}"
+  {% if settings.product_zoom_enable %}data-image-zoom="true"{% endif %}
+  {% if settings.inventory_enable %}data-inventory="true"{% endif %}
+  {% if settings.inventory_transfers_enable %}data-incoming-inventory="true"{% endif %}
+  data-history="true"
+  data-modal="false"
+>
+  <a class="sa-product-handle" href="{{ product.url }}"></a>
+  {%- render 'product-template-variables', product: product, current_variant: current_variant -%}
+
+  {%- if settings.inventory_enable or settings.inventory_transfers_enable -%}
+    {%- assign variants_with_inventory_tracking = product.variants | where: 'inventory_management', 'shopify' -%}
+    <script>
+      window.inventories = window.inventories || {};
+      window.inventories['{{ section_id }}'] = {};
+      {% for variant in variants_with_inventory_tracking %}
+        window.inventories['{{ section_id }}'][{{ variant.id }}] = {
+          'quantity': {{ variant.inventory_quantity | default: 0 }},
+          'policy': {{ variant.inventory_policy | json }},
+          'incoming': '{{ variant.incoming | default: false }}',
+          'next_incoming_date': {{ variant.next_incoming_date | date: format: 'date' | json }}
+        };
+      {% endfor %}
+    </script>
+  {%- endif -%}
+
+  <section class="id-pdp__hero">
+    <div class="id-pdp__media">
+      {%- render 'product-images',
+        section_id: section_id,
+        product: product,
+        isModal: false,
+        image_position: 'left',
+        product_zoom_size: product_zoom_size,
+        product_image_size: product_image_size,
+        thumbnail_arrows: section.settings.thumbnail_arrows,
+        thumbnail_position: 'below',
+        video_looping: section.settings.enable_video_looping,
+        video_style: section.settings.product_video_style
+      -%}
+    </div>
+
+    <div class="id-pdp__summary">
+      {%- if settings.show_breadcrumbs -%}
+        <div class="id-pdp__breadcrumbs">{%- render 'breadcrumbs' -%}</div>
+      {%- endif -%}
+
+      <h1 class="id-pdp__title">{{ product.title }}</h1>
+
+      {% if section.settings.show_star_placeholder %}
+        <div class="id-pdp__stars" aria-label="Product rating">
+          <span aria-hidden="true">&#9733;&#9733;&#9733;&#9733;&#9733;</span>
+        </div>
+      {% endif %}
+
+      <div class="id-pdp__price">
+        <span id="ProductPrice-{{ section_id }}" class="product__price{% if current_variant.compare_at_price > current_variant.price %} on-sale{% endif %}">
+          {{ current_variant.price | money }}
+        </span>
+        {% if current_variant.compare_at_price > current_variant.price %}
+          <span id="ComparePrice-{{ section_id }}" class="product__price product__price--compare">
+            {{ current_variant.compare_at_price | money }}
+          </span>
+        {% endif %}
+      </div>
+      <div class="id-pdp__tax-note">{{ 'products.product.include_taxes' | t }}</div>
+
+      {% if section.settings.short_description != blank %}
+        <div class="id-pdp__short">{{ section.settings.short_description }}</div>
+      {% elsif product.description != blank %}
+        <div class="id-pdp__short">{{ product.description | strip_html | truncatewords: 24 }}</div>
+      {% endif %}
+
+      {%- render 'product-form', section_id: section_id, product: product, current_variant: current_variant -%}
+
+      {%- unless product.has_only_default_variant -%}
+        {% if section.settings.size_chart_label != blank and section.settings.size_chart_url != blank %}
+          <a class="id-pdp__size-chart" href="{{ section.settings.size_chart_url }}">{{ section.settings.size_chart_label }}</a>
+        {% endif %}
+      {%- endunless -%}
+
+      {% if service_count > 0 %}
+        <div class="id-pdp__services">
+          {% for block in section.blocks %}
+            {% if block.type == 'service' %}
+              <div class="id-pdp__service" {{ block.shopify_attributes }}>
+                <span class="id-pdp__service-icon">{{ block.settings.icon }}</span>
+                <span>{{ block.settings.text }}</span>
+              </div>
+            {% endif %}
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="id-pdp__services">
+          <div class="id-pdp__service"><span class="id-pdp__service-icon">01</span><span>Cash on Delivery</span></div>
+          <div class="id-pdp__service"><span class="id-pdp__service-icon">02</span><span>Next Day Dispatch</span></div>
+        </div>
+      {% endif %}
+    </div>
+  </section>
+
+  {% if highlight_count > 0 %}
+    <section class="id-pdp__highlights">
+      <div class="id-pdp__label">{{ section.settings.highlights_heading }}</div>
+      <div class="id-pdp__highlight-grid">
+        {% for block in section.blocks %}
+          {% if block.type == 'highlight' %}
+            <div class="id-pdp__highlight" {{ block.shopify_attributes }}>
+              <span class="id-pdp__highlight-icon">{{ block.settings.icon }}</span>
+              <span>{{ block.settings.text }}</span>
+            </div>
+          {% endif %}
+        {% endfor %}
+      </div>
+    </section>
+  {% else %}
+    <section class="id-pdp__highlights">
+      <div class="id-pdp__label">{{ section.settings.highlights_heading }}</div>
+      <div class="id-pdp__highlight-grid">
+        <div class="id-pdp__highlight"><span class="id-pdp__highlight-icon">01</span><span>All Day Wear</span></div>
+        <div class="id-pdp__highlight"><span class="id-pdp__highlight-icon">02</span><span>15% Wider Toe Box</span></div>
+        <div class="id-pdp__highlight"><span class="id-pdp__highlight-icon">03</span><span>Wear & Repeat</span></div>
+      </div>
+    </section>
+  {% endif %}
+
+  <section class="id-pdp__closer">
+    <h2>{{ section.settings.closer_heading }}</h2>
+    <div class="id-pdp__closer-grid">
+      {% if closer_count > 0 %}
+        {% assign closer_index = 0 %}
+        {% for block in section.blocks %}
+          {% if block.type == 'closer' %}
+            {% assign fallback_media = product.media[closer_index] %}
+            {% assign fallback_image = fallback_media.preview_image | default: product.featured_media.preview_image %}
+            <article class="id-pdp__closer-card" {{ block.shopify_attributes }}>
+              {% if block.settings.image != blank %}
+                <img src="{{ block.settings.image | image_url: width: 520 }}" alt="{{ block.settings.title | escape }}" width="{{ block.settings.image.width }}" height="{{ block.settings.image.height }}" loading="lazy">
+              {% elsif fallback_image != blank %}
+                <img src="{{ fallback_image | image_url: width: 520 }}" alt="{{ fallback_media.alt | default: product.title | escape }}" width="{{ fallback_image.width }}" height="{{ fallback_image.height }}" loading="lazy">
+              {% endif %}
+              {% if block.settings.title != blank %}<h3>{{ block.settings.title }}</h3>{% endif %}
+              {% if block.settings.text != blank %}<div>{{ block.settings.text }}</div>{% endif %}
+            </article>
+            {% assign closer_index = closer_index | plus: 1 %}
+          {% endif %}
+        {% endfor %}
+      {% else %}
+        {% for media in product.media limit: 5 %}
+          <article class="id-pdp__closer-card">
+            {% if media.preview_image != blank %}
+              <img src="{{ media.preview_image | image_url: width: 520 }}" alt="{{ media.alt | escape }}" width="{{ media.preview_image.width }}" height="{{ media.preview_image.height }}" loading="lazy">
+            {% endif %}
+            <div>{{ section.settings.short_description | strip_html | truncatewords: 18 }}</div>
+          </article>
+        {% endfor %}
+      {% endif %}
+    </div>
+  </section>
+  {% if wear_count > 0 %}
+    <section class="id-pdp__wear">
+      <div class="id-pdp__wear-inner">
+        <h2>{{ section.settings.wear_heading }}</h2>
+        <div class="id-pdp__wear-grid">
+          {% for block in section.blocks %}
+            {% if block.type == 'wear' %}
+              <article class="id-pdp__wear-card" {{ block.shopify_attributes }}>
+                {% if block.settings.image != blank %}
+                  <img src="{{ block.settings.image | image_url: width: 680 }}" alt="{{ block.settings.title | escape }}" width="{{ block.settings.image.width }}" height="{{ block.settings.image.height }}" loading="lazy">
+                {% endif %}
+                {% if block.settings.title != blank %}<h3>{{ block.settings.title }}</h3>{% endif %}
+                {% if block.settings.text != blank %}<div>{{ block.settings.text }}</div>{% endif %}
+              </article>
+            {% endif %}
+          {% endfor %}
+        </div>
+      </div>
+    </section>
+  {% endif %}
+
+  {% if section.settings.show_comparison %}
+    <section class="id-pdp__comparison">
+      <div class="id-pdp__compare-table">
+        <div class="id-pdp__compare-head id-pdp__compare-feature"></div>
+        <div class="id-pdp__compare-head id-pdp__compare-brand">
+          {% if section.settings.comparison_logo != blank %}
+            <img src="{{ section.settings.comparison_logo | image_url: width: 160 }}" alt="{{ shop.name | escape }}" width="{{ section.settings.comparison_logo.width }}" height="{{ section.settings.comparison_logo.height }}" loading="lazy">
+          {% else %}
+            {{ shop.name }}
+          {% endif %}
+        </div>
+        <div class="id-pdp__compare-head">{{ section.settings.local_brand_heading }}</div>
+        <div class="id-pdp__compare-head">{{ section.settings.international_brand_heading }}</div>
+
+        {% for block in section.blocks %}
+          {% if block.type == 'comparison_row' %}
+            <div class="id-pdp__compare-cell id-pdp__compare-feature" {{ block.shopify_attributes }}>{{ block.settings.feature }}</div>
+            <div class="id-pdp__compare-cell id-pdp__compare-brand-cell">{% if block.settings.id_text != blank %}{{ block.settings.id_text }}{% else %}&#10003;{% endif %}</div>
+            <div class="id-pdp__compare-cell">{{ block.settings.local_text }}</div>
+            <div class="id-pdp__compare-cell">{{ block.settings.international_text }}</div>
+          {% endif %}
+        {% endfor %}
+        {% if comparison_count == 0 %}
+          <div class="id-pdp__compare-cell id-pdp__compare-feature">Return / exchange support</div>
+          <div class="id-pdp__compare-cell id-pdp__compare-brand-cell">30-day</div>
+          <div class="id-pdp__compare-cell">7-day rigid policies</div>
+          <div class="id-pdp__compare-cell">Fixed email support</div>
+          <div class="id-pdp__compare-cell id-pdp__compare-feature">High-quality Materials</div>
+          <div class="id-pdp__compare-cell id-pdp__compare-brand-cell">&#10003;</div>
+          <div class="id-pdp__compare-cell">Basic synthetics</div>
+          <div class="id-pdp__compare-cell">Standardized materials</div>
+          <div class="id-pdp__compare-cell id-pdp__compare-feature">Handcrafted Detailing</div>
+          <div class="id-pdp__compare-cell id-pdp__compare-brand-cell">&#10003;</div>
+          <div class="id-pdp__compare-cell">Simpler detailing</div>
+          <div class="id-pdp__compare-cell">Standardized detailing</div>
+        {% endif %}
+      </div>
+    </section>
+  {% endif %}
+
+  <section class="id-pdp__more">
+    <h2>{{ section.settings.more_heading }}</h2>
+    <div class="id-pdp__accordions">
+      {% if section.settings.show_description_accordion and product.description != blank %}
+        <details class="id-pdp__accordion">
+          <summary>{{ section.settings.description_heading }} <span>+</span></summary>
+          <div class="id-pdp__accordion-body rte">{{ product.description }}</div>
+        </details>
+      {% endif %}
+
+      {% for block in section.blocks %}
+        {% if block.type == 'accordion' %}
+          <details class="id-pdp__accordion" {{ block.shopify_attributes }}>
+            <summary>{{ block.settings.title }} <span>+</span></summary>
+            <div class="id-pdp__accordion-body rte">{{ block.settings.text }}</div>
+          </details>
+        {% endif %}
+      {% endfor %}
+    </div>
+  </section>
+
+  {%- unless product == empty -%}
+    <script type="application/json" id="ProductJson-{{ section_id }}">
+      {{ product | json }}
+    </script>
+  {%- endunless -%}
+</div>
+
+<style>
+  #ProductSection-{{ section_id }} {
+    --id-text: #111;
+    --id-muted: #6f6f6f;
+    --id-border: #ececec;
+    --id-panel: #f7f7f7;
+    --id-accent: {{ section.settings.accent_color }};
+    color: var(--id-text);
+    font-family: var(--typeBasePrimary), var(--typeBaseFallback);
+  }
+
+  #ProductSection-{{ section_id }} .id-pdp__hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1.1fr) minmax(340px, 0.6fr);
+    gap: 64px;
+    max-width: 1320px;
+    margin: 0 auto;
+    padding: 42px 28px 22px;
+  }
+
+  #ProductSection-{{ section_id }} .id-pdp__media .product__main-photos {
+    background: var(--id-panel);
+  }
+
+  #ProductSection-{{ section_id }} .id-pdp__media .product-main-slide,
+  #ProductSection-{{ section_id }} .id-pdp__media .product-main-slide .image-wrap {
+    background: var(--id-panel);
+  }
+
+  #ProductSection-{{ section_id }} .id-pdp__media .product__thumbs--below {
+    margin-top: 20px;
+  }
+
+  #ProductSection-{{ section_id }} .id-pdp__summary {
+    position: sticky;
+    top: 96px;
+    align-self: start;
+    padding-top: 18px;
+  }
+
+  #ProductSection-{{ section_id }} .id-pdp__breadcrumbs {
+    margin-bottom: 12px;
+    font-size: 11px;
+  }
+
+  #ProductSection-{{ section_id }} .id-pdp__title {
+    max-width: 430px;
+    margin: 0 0 8px;
+    font-size: 21px;
+    line-height: 1.08;
+    font-weight: 800;
+    letter-spacing: 0;
+    text-transform: uppercase;
+  }
+
+  #ProductSection-{{ section_id }} .id-pdp__stars {
+    color: var(--id-accent);
+    font-size: 17px;
+    line-height: 1;
+    margin-bottom: 20px;
+  }
+
+  #ProductSection-{{ section_id }} .id-pdp__price {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    font-size: 22px;
+    font-weight: 800;
+    margin-bottom: 0;
+  }
+
+  #ProductSection-{{ section_id }} .id-pdp__tax-note {
+    margin: 3px 0 14px;
+    color: var(--id-muted);
+    font-size: 9px;
+    text-transform: uppercase;
+  }
+
+  #ProductSection-{{ section_id }} .id-pdp__short {
+    max-width: 410px;
+    margin-bottom: 14px;
+    font-size: 12px;
+    line-height: 1.45;
+  }
+
+  #ProductSection-{{ section_id }} .product-single__form {
+    margin: 0;
+  }
+
+  #ProductSection-{{ section_id }} .variant-wrapper {
+    margin-bottom: 20px;
+  }
+
+  #ProductSection-{{ section_id }} .variant__label {
+    display: block;
+    margin-bottom: 8px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  #ProductSection-{{ section_id }} .variant-input-wrap select,
+  #ProductSection-{{ section_id }} .single-option-selector {
+    min-height: 58px;
+    border: 0;
+    background: var(--id-panel);
+    font-size: 13px;
+  }
+
+  #ProductSection-{{ section_id }} .add-to-cart {
+    min-height: 58px;
+    border-radius: 0;
+    background: #000;
+    color: #fff;
+    font-size: 17px;
+    font-weight: 400;
+    text-transform: none;
+    letter-spacing: 0;
+  }
+
+  #ProductSection-{{ section_id }} .product__inventory--pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin: 6px 0 14px;
+    padding: 10px 18px;
+    border-radius: 999px;
+    background: #efffd8;
+    color: #6a8b24;
+    font-size: 12px;
+  }
+
+  #ProductSection-{{ section_id }} .id-pdp__size-chart {
+    display: inline-block;
+    margin-top: 8px;
+    font-size: 11px;
+    color: var(--id-text);
+    text-decoration: underline;
+  }
+
+  #ProductSection-{{ section_id }} .idc-return-wrapper,
+  #ProductSection-{{ section_id }} .offer-badge-outline,
+  #ProductSection-{{ section_id }} .essential-estimated-delivery-block-liquid:empty,
+  #ProductSection-{{ section_id }} .wc_product_review_badge,
+  #ProductSection-{{ section_id }} .shopify-product-reviews-badge {
+    display: none;
+  }
+
+  #ProductSection-{{ section_id }} .id-pdp__services {
+    margin-top: 18px;
+    padding: 18px 22px;
+    background: var(--id-panel);
+  }
+
+  #ProductSection-{{ section_id }} .id-pdp__service {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 48px;
+    font-size: 12px;
+  }
+
+  #ProductSection-{{ section_id }} .id-pdp__service + .id-pdp__service {
+    border-top: 1px solid #fff;
+  }
+
+  #ProductSection-{{ section_id }} .id-pdp__service-icon,
+  #ProductSection-{{ section_id }} .id-pdp__highlight-icon {
+    font-size: 24px;
+    line-height: 1;
+  }
+
+  #ProductSection-{{ section_id }} .id-pdp__highlights {
+    max-width: 1320px;
+    margin: 16px auto 0;
+    padding: 0 28px 36px;
+  }
+
+  #ProductSection-{{ section_id }} .id-pdp__label {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: -1px;
+    font-size: 14px;
+    font-weight: 800;
+  }
+
+  #ProductSection-{{ section_id }} .id-pdp__label:after {
+    content: "";
+    height: 1px;
+    flex: 1;
+    background: var(--id-border);
+  }
+
+  #ProductSection-{{ section_id }} .id-pdp__highlight-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    max-width: 780px;
+    padding: 28px 22px;
+    border: 1px solid var(--id-border);
+    border-radius: 8px;
+  }
+
+  #ProductSection-{{ section_id }} .id-pdp__highlight {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 56px;
+    padding: 12px 18px;
+    background: var(--id-panel);
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  #ProductSection-{{ section_id }} .id-pdp__closer {
+    max-width: 1320px;
+    margin: 0 auto;
+    padding: 28px 28px 48px;
+  }
+
+  #ProductSection-{{ section_id }} .id-pdp__closer h2,
+  #ProductSection-{{ section_id }} .id-pdp__wear h2,
+  #ProductSection-{{ section_id }} .id-pdp__more h2 {
+    margin: 0 0 32px;
+    font-size: 34px;
+    line-height: 1;
+    font-weight: 900;
+    letter-spacing: 0;
+    text-transform: uppercase;
+  }
+
+  #ProductSection-{{ section_id }} .id-pdp__closer-grid {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 30px;
+  }
+
+  #ProductSection-{{ section_id }} .id-pdp__closer-card img {
+    width: 100%;
+    aspect-ratio: 1 / 1.2;
+    object-fit: cover;
+    display: block;
+    background: var(--id-panel);
+    margin-bottom: 18px;
+  }
+
+  #ProductSection-{{ section_id }} .id-pdp__closer-card h3,
+  #ProductSection-{{ section_id }} .id-pdp__wear-card h3 {
+    margin: 0 0 6px;
+    font-size: 12px;
+    font-weight: 800;
+    line-height: 1.25;
+  }
+
+  #ProductSection-{{ section_id }} .id-pdp__closer-card,
+  #ProductSection-{{ section_id }} .id-pdp__wear-card {
+    font-size: 11px;
+    line-height: 1.2;
+  }
+
+  #ProductSection-{{ section_id }} .id-pdp__wear {
+    background: #1f1f1f;
+    color: #fff;
+  }
+
+  #ProductSection-{{ section_id }} .id-pdp__wear-inner {
+    max-width: 1320px;
+    margin: 0 auto;
+    padding: 54px 28px 72px;
+  }
+
+  #ProductSection-{{ section_id }} .id-pdp__wear-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 260px));
+    gap: 66px;
+  }
+
+  #ProductSection-{{ section_id }} .id-pdp__wear-card img {
+    width: 100%;
+    aspect-ratio: 1 / 1.18;
+    object-fit: cover;
+    display: block;
+    margin-bottom: 18px;
+  }
+
+  #ProductSection-{{ section_id }} .id-pdp__comparison {
+    display: flex;
+    justify-content: center;
+    padding: 58px 28px 42px;
+    background:
+      radial-gradient(circle at 50% 48%, rgba(28, 91, 237, 0.22) 0, rgba(28, 91, 237, 0.12) 24%, rgba(255, 255, 255, 0) 54%),
+      linear-gradient(180deg, #fff 0%, #f8fbff 48%, #fff 100%);
+  }
+
+  #ProductSection-{{ section_id }} .id-pdp__compare-table {
+    display: grid;
+    grid-template-columns: minmax(160px, 1.05fr) minmax(110px, 0.8fr) minmax(125px, 1fr) minmax(125px, 1fr);
+    max-width: 520px;
+    width: 100%;
+    border: 1px solid rgba(228, 233, 244, 0.86);
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 18px 46px rgba(26, 77, 186, 0.14);
+    font-size: 12px;
+    background:
+      linear-gradient(90deg, rgba(255, 255, 255, 0.96) 0%, rgba(255, 255, 255, 0.94) 30%, rgba(217, 228, 255, 0.82) 38%, rgba(32, 91, 231, 0.94) 49%, rgba(4, 73, 219, 0.96) 55%, rgba(226, 235, 255, 0.78) 66%, rgba(255, 255, 255, 0.96) 100%);
+  }
+
+  #ProductSection-{{ section_id }} .id-pdp__compare-head,
+  #ProductSection-{{ section_id }} .id-pdp__compare-cell {
+    min-height: 62px;
+    padding: 14px 12px;
+    border-bottom: 1px solid rgba(231, 235, 245, 0.78);
+    border-right: 1px solid rgba(231, 235, 245, 0.72);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    background: rgba(255, 255, 255, 0.74);
+    backdrop-filter: blur(1px);
+  }
+
+  #ProductSection-{{ section_id }} .id-pdp__compare-feature {
+    justify-content: flex-start;
+    text-align: left;
+    font-weight: 800;
+  }
+
+  #ProductSection-{{ section_id }} .id-pdp__compare-brand,
+  #ProductSection-{{ section_id }} .id-pdp__compare-brand-cell {
+    color: #fff;
+    background: linear-gradient(180deg, rgba(239, 245, 255, 0.36) 0%, rgba(52, 105, 235, 0.92) 35%, rgba(0, 68, 216, 0.96) 100%);
+    border-color: rgba(255, 255, 255, 0.24);
+    box-shadow: inset 0 0 24px rgba(255, 255, 255, 0.12);
+    font-weight: 800;
+  }
+
+  #ProductSection-{{ section_id }} .id-pdp__compare-brand img {
+    max-width: 74px;
+    max-height: 44px;
+  }
+
+  #ProductSection-{{ section_id }} .id-pdp__more {
+    max-width: 1320px;
+    margin: 0 auto;
+    padding: 34px 28px 54px;
+  }
+
+  #ProductSection-{{ section_id }} .id-pdp__more h2 {
+    margin-bottom: 18px;
+    text-transform: none;
+  }
+
+  #ProductSection-{{ section_id }} .id-pdp__accordion {
+    border-bottom: 1px solid var(--id-border);
+  }
+
+  #ProductSection-{{ section_id }} .id-pdp__accordion summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 58px;
+    cursor: pointer;
+    list-style: none;
+    font-size: 15px;
+    font-weight: 600;
+  }
+
+  #ProductSection-{{ section_id }} .id-pdp__accordion summary::-webkit-details-marker {
+    display: none;
+  }
+
+  #ProductSection-{{ section_id }} .id-pdp__accordion summary span {
+    font-size: 24px;
+    font-weight: 400;
+  }
+
+  #ProductSection-{{ section_id }} .id-pdp__accordion[open] summary span {
+    transform: rotate(45deg);
+  }
+
+  #ProductSection-{{ section_id }} .id-pdp__accordion-body {
+    max-width: 780px;
+    padding: 0 0 18px;
+    color: #333;
+    font-size: 14px;
+    line-height: 1.7;
+  }
+
+  @media screen and (max-width: 960px) {
+    #ProductSection-{{ section_id }} .id-pdp__hero {
+      grid-template-columns: 1fr;
+      gap: 26px;
+      padding: 24px 16px 24px;
+    }
+
+    #ProductSection-{{ section_id }} .id-pdp__summary {
+      position: static;
+      padding-top: 0;
+    }
+
+    #ProductSection-{{ section_id }} .id-pdp__title {
+      font-size: 20px;
+    }
+
+    #ProductSection-{{ section_id }} .id-pdp__highlights,
+    #ProductSection-{{ section_id }} .id-pdp__closer,
+    #ProductSection-{{ section_id }} .id-pdp__wear-inner,
+    #ProductSection-{{ section_id }} .id-pdp__comparison,
+    #ProductSection-{{ section_id }} .id-pdp__more {
+      padding-left: 16px;
+      padding-right: 16px;
+    }
+
+    #ProductSection-{{ section_id }} .id-pdp__closer h2,
+    #ProductSection-{{ section_id }} .id-pdp__wear h2,
+    #ProductSection-{{ section_id }} .id-pdp__more h2 {
+      margin-bottom: 28px;
+      font-size: 26px;
+    }
+
+    #ProductSection-{{ section_id }} .id-pdp__closer-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 26px 14px;
+    }
+
+    #ProductSection-{{ section_id }} .id-pdp__wear-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 26px 18px;
+    }
+
+    #ProductSection-{{ section_id }} .id-pdp__compare-table {
+      overflow-x: auto;
+      min-width: 560px;
+    }
+
+    #ProductSection-{{ section_id }} .id-pdp__comparison {
+      justify-content: flex-start;
+      overflow-x: auto;
+    }
+  }
+</style>
+
+{% schema %}
+{
+  "name": "ID product template",
+  "settings": [
+    {
+      "type": "richtext",
+      "id": "short_description",
+      "label": "Short description",
+      "default": "<p>Step into comfort with a relaxed, premium pair made for all-day wear.</p>"
+    },
+    {
+      "type": "checkbox",
+      "id": "show_star_placeholder",
+      "label": "Show star row",
+      "default": true
+    },
+    {
+      "type": "url",
+      "id": "size_chart_url",
+      "label": "Size chart link"
+    },
+    {
+      "type": "text",
+      "id": "size_chart_label",
+      "label": "Size chart label",
+      "default": "Size chart"
+    },
+    {
+      "type": "color",
+      "id": "accent_color",
+      "label": "Accent color",
+      "default": "#f5b400"
+    },
+    {
+      "type": "header",
+      "content": "Media"
+    },
+    {
+      "type": "checkbox",
+      "id": "thumbnail_arrows",
+      "label": "Show thumbnail arrows",
+      "default": false
+    },
+    {
+      "type": "checkbox",
+      "id": "enable_video_looping",
+      "label": "Enable video looping",
+      "default": true
+    },
+    {
+      "type": "select",
+      "id": "product_video_style",
+      "label": "Video style",
+      "default": "muted",
+      "options": [
+        { "value": "muted", "label": "Video without sound" },
+        { "value": "unmuted", "label": "Video with sound" }
+      ]
+    },
+    {
+      "type": "header",
+      "content": "Section headings"
+    },
+    {
+      "type": "text",
+      "id": "highlights_heading",
+      "label": "Highlights heading",
+      "default": "Product Highlights"
+    },
+    {
+      "type": "text",
+      "id": "closer_heading",
+      "label": "Look closer heading",
+      "default": "Look Closer"
+    },
+    {
+      "type": "text",
+      "id": "wear_heading",
+      "label": "Lifestyle heading",
+      "default": "How He Wears It"
+    },
+    {
+      "type": "text",
+      "id": "more_heading",
+      "label": "Accordion heading",
+      "default": "More about the sneaker"
+    },
+    {
+      "type": "checkbox",
+      "id": "show_description_accordion",
+      "label": "Show product description accordion",
+      "default": true
+    },
+    {
+      "type": "text",
+      "id": "description_heading",
+      "label": "Description accordion title",
+      "default": "Description"
+    },
+    {
+      "type": "header",
+      "content": "Comparison"
+    },
+    {
+      "type": "checkbox",
+      "id": "show_comparison",
+      "label": "Show comparison table",
+      "default": true
+    },
+    {
+      "type": "image_picker",
+      "id": "comparison_logo",
+      "label": "Comparison logo"
+    },
+    {
+      "type": "text",
+      "id": "local_brand_heading",
+      "label": "Local brand heading",
+      "default": "Local Brand"
+    },
+    {
+      "type": "text",
+      "id": "international_brand_heading",
+      "label": "International brand heading",
+      "default": "International Brand"
+    }
+  ],
+  "blocks": [
+    {
+      "type": "highlight",
+      "name": "Highlight",
+      "settings": [
+        { "type": "text", "id": "icon", "label": "Icon", "default": "01" },
+        { "type": "text", "id": "text", "label": "Text", "default": "All Day Wear" }
+      ]
+    },
+    {
+      "type": "service",
+      "name": "Service badge",
+      "settings": [
+        { "type": "text", "id": "icon", "label": "Icon", "default": "01" },
+        { "type": "text", "id": "text", "label": "Text", "default": "Cash on Delivery" }
+      ]
+    },
+    {
+      "type": "closer",
+      "name": "Look closer card",
+      "settings": [
+        { "type": "image_picker", "id": "image", "label": "Image" },
+        { "type": "text", "id": "title", "label": "Title" },
+        { "type": "richtext", "id": "text", "label": "Text", "default": "<p>Step into comfort with premium materials and everyday ease.</p>" }
+      ]
+    },
+    {
+      "type": "wear",
+      "name": "Lifestyle card",
+      "settings": [
+        { "type": "image_picker", "id": "image", "label": "Image" },
+        { "type": "text", "id": "title", "label": "Title" },
+        { "type": "richtext", "id": "text", "label": "Text", "default": "<p>Made to pair easily with relaxed everyday looks.</p>" }
+      ]
+    },
+    {
+      "type": "comparison_row",
+      "name": "Comparison row",
+      "settings": [
+        { "type": "text", "id": "feature", "label": "Feature", "default": "High-quality Materials" },
+        { "type": "text", "id": "id_text", "label": "ID column text", "default": "Yes" },
+        { "type": "text", "id": "local_text", "label": "Local brand text", "default": "Basic synthetics" },
+        { "type": "text", "id": "international_text", "label": "International brand text", "default": "Standardized materials" }
+      ]
+    },
+    {
+      "type": "accordion",
+      "name": "Accordion",
+      "settings": [
+        { "type": "text", "id": "title", "label": "Title", "default": "Shipping, Returns and Exchanges" },
+        { "type": "richtext", "id": "text", "label": "Text", "default": "<p>Add shipping, return, exchange, origin, or care details here.</p>" }
+      ]
+    }
+  ]
+}
+{% endschema %}
